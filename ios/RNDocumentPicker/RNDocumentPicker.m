@@ -9,6 +9,7 @@
 
 static NSString *const E_DOCUMENT_PICKER_CANCELED = @"DOCUMENT_PICKER_CANCELED";
 static NSString *const E_INVALID_DATA_RETURNED = @"INVALID_DATA_RETURNED";
+static NSString *const E_CANT_COPY_FOLDER = @"CANT_COPY_FOLDER";
 
 static NSString *const OPTION_TYPE = @"type";
 static NSString *const OPTION_MULIPLE = @"multiple";
@@ -19,6 +20,7 @@ static NSString *const FIELD_COPY_ERR = @"copyError";
 static NSString *const FIELD_NAME = @"name";
 static NSString *const FIELD_TYPE = @"type";
 static NSString *const FIELD_SIZE = @"size";
+
 
 @interface RNDocumentPicker () <UIDocumentPickerDelegate>
 @end
@@ -56,7 +58,24 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
     NSArray *allowedUTIs = [RCTConvert NSArray:options[OPTION_TYPE]];
-    UIDocumentPickerViewController *documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:(NSArray *)allowedUTIs inMode:UIDocumentPickerModeImport];
+    
+    UIDocumentPickerMode mode = UIDocumentPickerModeImport;
+    
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000
+    if (allowedUTIs.count == 1 &&
+        [allowedUTIs.firstObject isEqual:  (NSString*)kUTTypeFolder])
+    {
+        mode = UIDocumentPickerModeOpen;
+        
+        if (options[@"copyTo"] != nil)
+        {
+            reject(E_CANT_COPY_FOLDER, @"can't copy a folder", nil);
+            return ;
+        }
+    }
+#endif
+    
+    UIDocumentPickerViewController *documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:(NSArray *)allowedUTIs inMode:mode];
     
     [composeResolvers addObject:resolve];
     [composeRejecters addObject:reject];
@@ -160,7 +179,8 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentAtURL:(NSURL *)url
 {
-    if (controller.documentPickerMode == UIDocumentPickerModeImport) {
+    if (controller.documentPickerMode == UIDocumentPickerModeOpen ||
+        controller.documentPickerMode == UIDocumentPickerModeImport) {
         RCTPromiseResolveBlock resolve = [composeResolvers lastObject];
         RCTPromiseRejectBlock reject = [composeRejecters lastObject];
         [composeResolvers removeLastObject];
@@ -179,7 +199,8 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
 {
-    if (controller.documentPickerMode == UIDocumentPickerModeImport) {
+    if (controller.documentPickerMode == UIDocumentPickerModeOpen ||
+        controller.documentPickerMode == UIDocumentPickerModeImport) {
         RCTPromiseResolveBlock resolve = [composeResolvers lastObject];
         RCTPromiseRejectBlock reject = [composeRejecters lastObject];
         [composeResolvers removeLastObject];

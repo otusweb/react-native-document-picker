@@ -62,6 +62,22 @@ function pick(opts) {
     );
   }
 
+  if (Platform.OS === 'ios' && opts.type.indexOf(DocumentPicker.types.folder) !== -1)
+  {
+    if (Platform.Version < 13)
+    {
+      throw new TypeError('Selecting a folder on iOS is not supported before iOS 13: ' + opts.type);
+    }
+    if (opts.type.length > 1)
+    {
+      throw new TypeError('If type "folder" is passed, then no other type should be passed: ' + opts.type);
+    }
+    if ('copyTo' in opts)
+    {
+      throw new TypeError('Copying folder is not supported: ' + opts.copyTo);
+    }
+  }
+
   if ('copyTo' in opts && !['cachesDirectory', 'documentDirectory'].includes(opts.copyTo)) {
     throw new TypeError('Invalid copyTo option: ' + opts.copyTo);
   }
@@ -89,6 +105,7 @@ const Types = {
     pdf: 'com.adobe.pdf',
     video: 'public.movie',
     zip: 'public.zip-archive',
+    folder:'public.folder'
   },
   extensions: {
     allFiles: '*',
