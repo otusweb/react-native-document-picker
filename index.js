@@ -20,6 +20,41 @@ if (!RNDocumentPicker) {
 
 const E_DOCUMENT_PICKER_CANCELED = 'DOCUMENT_PICKER_CANCELED';
 
+function pickFolder(opts) {
+  if ('filetype' in opts) {
+    throw new TypeError(
+      'A `filetype` option was passed to DocumentPicker.pickFolder, option is not allowed`'
+    );
+  }
+  if ('types' in opts) {
+    throw new TypeError(
+      'A `types` option was passed to DocumentPicker.pick, the correct option is `type`'
+    );
+  }
+
+  if (('type' in opts)) {
+    throw new TypeError(
+      'A `type` option was passed to DocumentPicker.pickFolder, which is not allowed'
+    );
+  }
+
+  if ('copyTo' in opts)
+  {
+    throw new TypeError('Copying folder is not supported: ' + opts.copyTo);
+  }
+
+  if (Platform.OS === 'ios' )
+  {
+    if (Platform.Version < 13)
+    {
+      throw new TypeError('Selecting a folder on iOS is not supported before iOS 13: ' + opts.type);
+    }
+  }
+
+
+  return RNDocumentPicker.pickFolder(opts);
+}
+
 function pick(opts) {
   if ('filetype' in opts) {
     throw new TypeError(
@@ -133,6 +168,15 @@ export default class DocumentPicker {
    * @see https://developer.apple.com/library/ios/documentation/Miscellaneous/Reference/UTIRef/Articles/System-DeclaredUniformTypeIdentifiers.html
    */
   static types = PlatformTypes[Platform.OS] || Types.mimeTypes;
+
+  static pickFolder(opts) {
+    const options = {
+      ...opts,
+      multiple: false,
+    };
+
+    return pickFolder(options).then((results) => results[0]);
+  }
 
   static pick(opts) {
     const options = {

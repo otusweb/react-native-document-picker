@@ -21,6 +21,8 @@ static NSString *const FIELD_NAME = @"name";
 static NSString *const FIELD_TYPE = @"type";
 static NSString *const FIELD_SIZE = @"size";
 
+//static NSString *const USERDEFAULTS_BOOKMARKS = @"bookmarkURLs";
+
 
 @interface RNDocumentPicker () <UIDocumentPickerDelegate>
 @end
@@ -29,6 +31,7 @@ static NSString *const FIELD_SIZE = @"size";
     NSMutableArray *composeResolvers;
     NSMutableArray *composeRejecters;
     NSString* copyDestination;
+    NSURL *baseScopedURL;
 }
 
 @synthesize bridge = _bridge;
@@ -52,6 +55,34 @@ static NSString *const FIELD_SIZE = @"size";
 }
 
 RCT_EXPORT_MODULE()
+
+RCT_EXPORT_METHOD(pickFolder:(NSDictionary *)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    
+    
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000
+    if (@available(iOS 13, *)) {
+        
+        UIDocumentPickerViewController *documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[(NSString*)kUTTypeFolder]
+                                                                                                                inMode:UIDocumentPickerModeOpen];
+        
+        [composeResolvers addObject:resolve];
+        [composeRejecters addObject:reject];
+        
+        documentPicker.delegate = self;
+        documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
+        
+        documentPicker.allowsMultipleSelection = [RCTConvert BOOL:options[OPTION_MULIPLE]];
+        
+        UIViewController *rootViewController = RCTPresentedViewController();
+        
+        [rootViewController presentViewController:documentPicker animated:YES completion:nil];
+        
+    }
+#endif
+}
 
 RCT_EXPORT_METHOD(pick:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
@@ -80,7 +111,7 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
     [composeResolvers addObject:resolve];
     [composeRejecters addObject:reject];
     copyDestination = options[@"copyTo"] ? options[@"copyTo"] : nil;
-
+    
     
     documentPicker.delegate = self;
     documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
@@ -114,7 +145,7 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
             if (copyError) {
                 [result setValue:copyError.description forKey:FIELD_COPY_ERR];
             }
-
+            
             [result setValue:[newURL lastPathComponent] forKey:FIELD_NAME];
             
             NSError *attributesError = nil;
@@ -187,7 +218,8 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
         [composeRejecters removeLastObject];
         
         NSError *error;
-        NSMutableDictionary* result = [self getMetadataForUrl:url error:&error];
+        NSDictionary* result = @{FIELD_URI: url.absoluteString};
+        
         if (result) {
             NSArray *results = @[result];
             resolve(results);
@@ -199,6 +231,7 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
 {
+    NSLog(@"urls: %@", urls);
     if (controller.documentPickerMode == UIDocumentPickerModeOpen ||
         controller.documentPickerMode == UIDocumentPickerModeImport) {
         RCTPromiseResolveBlock resolve = [composeResolvers lastObject];
@@ -206,19 +239,35 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
         [composeResolvers removeLastObject];
         [composeRejecters removeLastObject];
         
+        //        NSMutableDictionary *bookmarks = [[[NSUserDefaults standardUserDefaults] valueForKey: USERDEFAULTS_BOOKMARKS] mutableCopy];
+        //        if (bookmarks == nil)
+        //        {
+        //            bookmarks = [NSMutableDictionary new];
+        //        }
+        
         NSMutableArray *results = [NSMutableArray array];
-        for (id url in urls) {
-            NSError *error;
-            NSMutableDictionary* result = [self getMetadataForUrl:url error:&error];
-            if (result) {
-                [results addObject:result];
-            } else {
-                reject(E_INVALID_DATA_RETURNED, error.localizedDescription, error);
-                return;
-            }
+        for (NSURL* url in urls) {
+            //            NSError *bookMarkError;
+            //
+            //            //store the bookmark info for each URL associate a UUID to each
+            //            NSData *bookmarkData = [url bookmarkDataWithOptions:NSURLBookmarkCreationMinimalBookmark
+            //                                 includingResourceValuesForKeys: nil
+            //                                                  relativeToURL:nil
+            //                                                          error:&bookMarkError];
+            
+            baseScopedURL = url;
+            NSLog(@"path: %@", url);
+            [url startAccessingSecurityScopedResource];
+            
+            //            bookmarks[url.absoluteString] = bookmarkData;
+            
+            [results addObject: [self photoInfos]];
         }
         
+        //        [[NSUserDefaults standardUserDefaults] setObject:bookmarks forKey:USERDEFAULTS_BOOKMARKS];
+        
         resolve(results);
+        
     }
 }
 
@@ -231,6 +280,87 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
         
         reject(E_DOCUMENT_PICKER_CANCELED, @"User canceled document picker", nil);
     }
+}
+
+- (NSArray<NSDictionary*>*) photoInfos
+{
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    
+    NSFileCoordinator *coordinator = [[NSFileCoordinator alloc] init];
+    __block NSError *fileError;
+    __block NSMutableArray *contents = [NSMutableArray new];
+    
+    [coordinator coordinateReadingItemAtURL:baseScopedURL options:NSFileCoordinatorReadingResolvesSymbolicLink error:&fileError byAccessor:^(NSURL *newURL) {
+        NSArray *contentsPath = [fileManager contentsOfDirectoryAtPath:[newURL path] error:&fileError];
+        
+        for (NSString *path in contentsPath) {
+            NSURL *itemURL = [newURL URLByAppendingPathComponent: path];
+            NSString *path = [itemURL path];
+            NSDictionary *attributes = [fileManager attributesOfItemAtPath:path error:nil];
+            
+            NSString* fileExtension = [path pathExtension];
+            CFStringRef fileUTI = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, (__bridge CFStringRef _Nonnull)(fileExtension), NULL);
+            
+            NSDictionary *exifDict = @{};
+            if (UTTypeConformsTo(fileUTI, kUTTypeImage))
+            {
+                CGImageSourceRef imageSource = CGImageSourceCreateWithURL((CFURLRef)itemURL, nil);
+                
+                NSDictionary* imageProperties = CFBridgingRelease(CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil));
+                exifDict = imageProperties[(NSString*)kCGImagePropertyExifDictionary];
+                if (exifDict == nil)
+                {
+                    exifDict = @{};
+                }
+                
+                CFDictionaryRef options = (__bridge CFDictionaryRef) @{
+                    (id) kCGImageSourceCreateThumbnailWithTransform : @YES,
+                    (id) kCGImageSourceCreateThumbnailFromImageAlways : @YES,
+                    (id) kCGImageSourceThumbnailMaxPixelSize : @(300)
+                };
+                
+                CGImageRef scaledImageRef = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, options);
+                UIImage *scaled = [UIImage imageWithCGImage:scaledImageRef];
+                NSString *thumbPath = [self saveImageToTemp: scaled];
+                
+                CGImageRelease(scaledImageRef);
+                
+                CFRelease(imageSource);
+                NSLog(@"path: %@", path);
+                NSMutableDictionary *objectInfo = @{
+                    @"ctime": @([(NSDate *)[attributes objectForKey:NSFileCreationDate] timeIntervalSince1970]),
+                    @"mtime": @([(NSDate *)[attributes objectForKey:NSFileModificationDate] timeIntervalSince1970]),
+                    @"name": [itemURL lastPathComponent],
+                    @"path": path,
+                    @"size": [attributes objectForKey:NSFileSize],
+                    @"type": [attributes objectForKey:NSFileType],
+                    @"thumb": thumbPath,
+                    @"exif": exifDict,
+                    
+                };
+                
+                [contents addObject: objectInfo];
+            }
+        }
+    }];
+    
+    return contents;
+    
+    //    if (isScopedURL)
+    //    {
+    //        [url stopAccessingSecurityScopedResource];
+    //    }
+}
+
+- (NSString*) saveImageToTemp:(UIImage*)image
+{
+    NSString *tmpDirectory = NSTemporaryDirectory();
+    NSString *uuid = [[NSUUID new] UUIDString];
+    NSString *tmpFile = [[tmpDirectory stringByAppendingPathComponent:uuid] stringByAppendingPathExtension: @"jpg"];
+    NSData * imageData = UIImageJPEGRepresentation(image, 1.0);
+    [imageData writeToFile:tmpFile atomically:true];
+    
+    return tmpFile;
 }
 
 @end
