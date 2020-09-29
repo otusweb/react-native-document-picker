@@ -273,7 +273,8 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller
 {
-    if (controller.documentPickerMode == UIDocumentPickerModeImport) {
+    if (controller.documentPickerMode == UIDocumentPickerModeOpen ||
+        controller.documentPickerMode == UIDocumentPickerModeImport) {
         RCTPromiseRejectBlock reject = [composeRejecters lastObject];
         [composeResolvers removeLastObject];
         [composeRejecters removeLastObject];
