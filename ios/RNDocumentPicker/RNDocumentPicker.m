@@ -154,12 +154,14 @@ RCT_EXPORT_METHOD(copyToTemp:(NSDictionary *)options
             NSURL* copyURL = [RNDocumentPicker copyToUniqueDestinationFrom:fileURL
                                                     usingDestinationPreset:nil
                                                                      error:copyError];
+            [result setValue:copyURL.lastPathComponent forKey:FIELD_NAME];
             [result setValue: copyURL.absoluteString forKey:FIELD_FILE_COPY_URI];
             NSString *mimeType = [RNDocumentPicker mimeTypeForURL: copyURL];
             if (mimeType)
             {
                 [result setValue: mimeType forKey:FIELD_TYPE];
             }
+            
             if (copyError) {
                 [result setValue:copyError.description forKey:FIELD_COPY_ERR];
             }
