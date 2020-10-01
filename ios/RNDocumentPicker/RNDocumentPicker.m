@@ -301,31 +301,17 @@ RCT_EXPORT_METHOD(copyToTemp:(NSDictionary *)options
         [composeResolvers removeLastObject];
         [composeRejecters removeLastObject];
         
-        //        NSMutableDictionary *bookmarks = [[[NSUserDefaults standardUserDefaults] valueForKey: USERDEFAULTS_BOOKMARKS] mutableCopy];
-        //        if (bookmarks == nil)
-        //        {
-        //            bookmarks = [NSMutableDictionary new];
-        //        }
         
         NSMutableArray *results = [NSMutableArray array];
         for (NSURL* url in urls) {
-            //            NSError *bookMarkError;
-            //
-            //            //store the bookmark info for each URL associate a UUID to each
-            //            NSData *bookmarkData = [url bookmarkDataWithOptions:NSURLBookmarkCreationMinimalBookmark
-            //                                 includingResourceValuesForKeys: nil
-            //                                                  relativeToURL:nil
-            //                                                          error:&bookMarkError];
             
             baseScopedURL = url;
             [url startAccessingSecurityScopedResource];
             
-            //            bookmarks[url.absoluteString] = bookmarkData;
             
             [results addObject: [self photoInfos]];
         }
         
-        //        [[NSUserDefaults standardUserDefaults] setObject:bookmarks forKey:USERDEFAULTS_BOOKMARKS];
         
         resolve(results);
         
@@ -407,11 +393,6 @@ RCT_EXPORT_METHOD(copyToTemp:(NSDictionary *)options
     }];
     
     return contents;
-    
-    //    if (isScopedURL)
-    //    {
-    //        [url stopAccessingSecurityScopedResource];
-    //    }
 }
 
 - (NSString*) saveImageToTemp:(UIImage*)image
