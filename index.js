@@ -55,6 +55,17 @@ function pickFolder(opts) {
   return RNDocumentPicker.pickFolder(opts);
 }
 
+
+function copyToTemp(opts) {
+  if ('filePath' in opts == false) {
+    throw new TypeError(
+      'A `filePath` option is required`'
+    );
+  }
+ 
+  return RNDocumentPicker.copyToTemp(opts);
+}
+
 function pick(opts) {
   if ('filetype' in opts) {
     throw new TypeError(
@@ -169,6 +180,9 @@ export default class DocumentPicker {
    */
   static types = PlatformTypes[Platform.OS] || Types.mimeTypes;
 
+  static copyToTemp(opts) {
+    return copyToTemp(opts);
+  }
   static pickFolder(opts) {
     const options = {
       ...opts,

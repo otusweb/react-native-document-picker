@@ -10,6 +10,7 @@
 static NSString *const E_DOCUMENT_PICKER_CANCELED = @"DOCUMENT_PICKER_CANCELED";
 static NSString *const E_INVALID_DATA_RETURNED = @"INVALID_DATA_RETURNED";
 static NSString *const E_CANT_COPY_FOLDER = @"CANT_COPY_FOLDER";
+static NSString *const E_INVALID_FILEPATH_PARAM = @"MISSING_FILEPATH_PARAM";
 
 static NSString *const OPTION_TYPE = @"type";
 static NSString *const OPTION_MULIPLE = @"multiple";
@@ -127,6 +128,51 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
     [rootViewController presentViewController:documentPicker animated:YES completion:nil];
 }
 
+
+RCT_EXPORT_METHOD(copyToTemp:(NSDictionary *)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    __block NSMutableDictionary* result = [NSMutableDictionary dictionary];
+    NSString *filePath = options[@"filePath"];
+    NSURL *fileURL = [NSURL fileURLWithPath: filePath];
+    
+    if (!fileURL)
+    {
+        reject(E_INVALID_FILEPATH_PARAM, @"invalid parameter 'filePath'", nil);
+    }
+    
+    NSFileCoordinator *coordinator = [[NSFileCoordinator alloc] init];
+    NSError *fileError;
+    
+    [coordinator coordinateReadingItemAtURL:baseScopedURL
+                                    options:NSFileCoordinatorReadingResolvesSymbolicLink
+                                      error:&fileError
+                                 byAccessor:^(NSURL *newURL) {
+        if (!fileError) {
+            NSError *copyError;
+            NSURL* copyURL = [RNDocumentPicker copyToUniqueDestinationFrom:fileURL
+                                                    usingDestinationPreset:nil
+                                                                     error:copyError];
+            [result setValue: copyURL.absoluteString forKey:FIELD_FILE_COPY_URI];
+            NSString *mimeType = [RNDocumentPicker mimeTypeForURL: copyURL];
+            if (mimeType)
+            {
+                [result setValue: mimeType forKey:FIELD_TYPE];
+            }
+            if (copyError) {
+                [result setValue:copyError.description forKey:FIELD_COPY_ERR];
+            }
+        }
+    }];
+    
+    if (fileError) {
+        reject(E_INVALID_FILEPATH_PARAM, @"failed to copy file", fileError);
+    } else {
+        resolve(result);
+    }
+}
+
 - (NSMutableDictionary *)getMetadataForUrl:(NSURL *)url error:(NSError **)error
 {
     __block NSMutableDictionary* result = [NSMutableDictionary dictionary];
@@ -176,6 +222,20 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
     } else {
         return result;
     }
+}
+
++ (NSString*) mimeTypeForURL:(NSURL*) url
+{
+    if ( url.pathExtension != nil ) {
+        CFStringRef extension = (__bridge CFStringRef)[url pathExtension];
+        CFStringRef uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, extension, NULL);
+        CFStringRef mimeType = UTTypeCopyPreferredTagWithClass(uti, kUTTagClassMIMEType);
+        CFRelease(uti);
+        
+        NSString *mimeTypeString = (__bridge_transfer NSString *)mimeType;
+        return mimeTypeString;
+    }
+    return nil;
 }
 
 + (NSURL*)getDirectoryForFileCopy:(NSString*) copyToDirectory {
@@ -256,7 +316,6 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
             //                                                          error:&bookMarkError];
             
             baseScopedURL = url;
-            NSLog(@"path: %@", url);
             [url startAccessingSecurityScopedResource];
             
             //            bookmarks[url.absoluteString] = bookmarkData;
